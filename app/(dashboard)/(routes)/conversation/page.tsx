@@ -1,21 +1,35 @@
 'use client';
 
 import * as z from 'zod';
-import { MessageSquare } from 'lucide-react';
+import axios from 'axios';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-
-import Heading from '@/components/Heading';
-import { formSchema } from './constants';
+import { useRouter } from 'next/navigation';
+import { MessageSquare } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ChatCompletionRequestMessage } from 'openai';
+
 import { Form, FormControl, FormField, FormItem } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { formSchema } from './constants';
+import Heading from '@/components/Heading';
+import Empty from '@/components/Empty';
+import Loader from '@/components/Loader';
+import { cn } from '@/lib/utils';
+import UserAvatar from '@/components/UserAvatar';
+import BotAvatar from '@/components/BotAvatar';
 
 export const metadata = {
 	title: 'Generate Conversation | Genius'
 };
 
 const ConversationPage = () => {
+	const router = useRouter();
+	const [messages, setMessages] = useState<ChatCompletionRequestMessage[]>(
+		[]
+	);
+
 	const form = useForm<z.infer<typeof formSchema>>({
 		resolver: zodResolver(formSchema),
 		defaultValues: {
@@ -26,7 +40,27 @@ const ConversationPage = () => {
 	const isLoading = form.formState.isSubmitting;
 
 	const handleOnSubmit = async (values: z.infer<typeof formSchema>) => {
-		console.log(values);
+		try {
+			const userMessage: ChatCompletionRequestMessage = {
+				role: 'user',
+				content: values.prompt
+			};
+			const newMessages = [...messages, userMessage];
+
+			const response = await axios.post('/api/conversation', {
+				messages: newMessages
+			});
+
+			// PENDING FREE TRIAL
+			setMessages(current => [...current, userMessage, response.data]);
+
+			form.reset();
+		} catch (error: any) {
+			// TODO: Open Pro Modal
+			console.error(error);
+		} finally {
+			router.refresh();
+		}
 	};
 
 	return (
@@ -60,6 +94,7 @@ const ConversationPage = () => {
 							)}
 						/>
 						<Button
+							type="submit"
 							className="col-span-12 lg:col-span-2 w-full"
 							disabled={isLoading}
 						>
@@ -68,7 +103,37 @@ const ConversationPage = () => {
 					</form>
 				</Form>
 				<div className="space-y-4 mt-4">
-					Messages Content
+					{isLoading && (
+						<div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
+							<Loader />
+						</div>
+					)}
+
+					{messages.length === 0 && !isLoading && (
+						<Empty label="No conversation started" />
+					)}
+					<div className="flex flex-col-reverse gap-y-4">
+						{messages.map((message, i) => (
+							<div
+								key={i}
+								className={cn(
+									'p-8 w-full flex items-start gap-x-8 rounded-lg',
+									message.role === 'user'
+										? 'bg-white border border-black/10'
+										: 'bg-muted'
+								)}
+							>
+								{message.role === 'user' ? (
+									<UserAvatar />
+								) : (
+									<BotAvatar />
+								)}
+								<p className='text-sm'>
+									{message.content}
+								</p>
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 		</div>
